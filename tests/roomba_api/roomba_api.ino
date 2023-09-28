@@ -3,111 +3,124 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 
-byte M1d = 14;
-byte M2d = 27;
-
-byte M1dir1 = 26;
-byte M1dir2 = 12;
-byte M2dir1 = 33;
-byte M2dir2 = 32;
-
-const char *SSID = "ARRIS-25DF";
-const char *PWD = "1D56D9B1FD31E39C";
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 
 WebServer server(80);
-
+ 
 StaticJsonDocument<250> jsonDocument;
 char buffer[250];
 
-void goForward() {
-  Serial.println("goForward");
+byte rightDisable = 26;
+byte leftDisable = 25;
 
-  digitalWrite(M1d, LOW);
-  digitalWrite(M2d, LOW);
+byte rightForward = 27;
+byte rightBack = 14;
+byte leftForward = 32;
+byte leftBack = 33;
 
-  digitalWrite(M1dir1, LOW);
-  digitalWrite(M1dir2, HIGH);
-  digitalWrite(M2dir1, LOW);
-  digitalWrite(M2dir2, HIGH);
+String outputcm;
 
-  server.send(200, "application/json", buffer);
-}
+int triggerpin = 19;
+int echopin = 34;
 
-void goBack() {
-  Serial.println("goBack");
+float distance;
 
-  digitalWrite(M1d, LOW);
-  digitalWrite(M2d, LOW);
+bool goingForward;
 
-  digitalWrite(M1dir1, HIGH);
-  digitalWrite(M1dir2, LOW);
-  digitalWrite(M2dir1, HIGH);
-  digitalWrite(M2dir2, LOW);
+void controlMovement(int right, int left) {
+  Serial.print("Request details - right: "); Serial.print(right); Serial.print(", left: "); Serial.println(left);
 
-  server.send(200, "application/json", buffer);
-}
+  if (right > 0) {
+    digitalWrite(rightForward, HIGH);
+    digitalWrite(rightBack, LOW);
+  } else {
+    digitalWrite(rightForward, LOW);
+    digitalWrite(rightBack, HIGH);
+  }
 
-void goStop() {
-  Serial.println("goStop");
-
-  digitalWrite(M1d, HIGH);
-  digitalWrite(M2d, HIGH);
-
-  digitalWrite(M1dir1, LOW);
-  digitalWrite(M1dir2, LOW);
-  digitalWrite(M2dir1, LOW);
-  digitalWrite(M2dir2, LOW);
-
-  server.send(200, "application/json", buffer);
-}
-
-void routingSetup() {
-  server.on("/forward", goForward);
-  server.on("/back", goBack);
-  server.on("/stop", goStop);
+  if (left > 0) {
+    digitalWrite(leftForward, HIGH);
+    digitalWrite(leftBack, LOW);
+  } else {
+    digitalWrite(leftForward, LOW);
+    digitalWrite(leftBack, HIGH);
+  }
   
-  server.begin();    
+  analogWrite(rightDisable, 255-abs(right));
+  analogWrite(leftDisable, 255-abs(left));
+
+  if (right > 0 || left > 0) {
+    goingForward = true;
+  } else {
+    goingForward = false;
+  }
 }
- 
 
 void handlePost() {
+  Serial.println("Request recieved");
+  
   if (server.hasArg("plain") == false) {
+    Serial.println("Request invalid - no body");
+    server.send(400, "application/json", "{}");
+    return;
   }
+  
   String body = server.arg("plain");
   deserializeJson(jsonDocument, body);
-
+  
+  controlMovement(jsonDocument["right"], jsonDocument["left"]);
+  
   server.send(200, "application/json", "{}");
 }
 
-void setup() {     
-  Serial.begin(115200); 
+void setup() {
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+  
+  Serial.begin(115200);
 
-  Serial.print("Motor setup");
+  Serial.println("\nMotor setup");
+  pinMode(rightDisable, OUTPUT); digitalWrite(rightDisable, HIGH);
+  pinMode(leftDisable, OUTPUT); digitalWrite(leftDisable, HIGH);
+  
+  pinMode(rightForward, OUTPUT);
+  pinMode(rightBack, OUTPUT);
+  pinMode(leftForward, OUTPUT);
+  pinMode(leftBack, OUTPUT);
 
-  pinMode(M1dir1, OUTPUT);
-  pinMode(M1dir2, OUTPUT);
-  pinMode(M2dir1, OUTPUT);
-  pinMode(M2dir2, OUTPUT);
-  pinMode(M1d, OUTPUT);
-  pinMode(M2d, OUTPUT);
-
-  digitalWrite(M1d, HIGH);
-  digitalWrite(M2d, HIGH);
-
-  Serial.print("Connecting to Wi-Fi");
-  WiFi.begin(SSID, PWD);
+  Serial.println("Proximity setup");
+  pinMode(triggerpin, OUTPUT);
+  pinMode(echopin, INPUT);
+  
+  Serial.print("Connecting to wifi");
+  WiFi.begin("ARRIS-25DF", "1D56D9B1FD31E39C");
   
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
     delay(500);
   }
  
-  Serial.print("\nConnected. IP:");
+  Serial.print("Connected. IP: ");
   Serial.println(WiFi.localIP());
-  routingSetup();     
-   
+  
+  server.on("/", HTTP_POST, handlePost);
+  server.begin();
+  Serial.print("Server running, accepting requests.");
 }    
        
-void loop() {    
-  server.handleClient();   
+void loop() {   
+  digitalWrite(triggerpin, LOW);
+  delayMicroseconds(10);
+  digitalWrite(triggerpin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(triggerpin, LOW);
+  
+  distance = (pulseIn(echopin, HIGH)*765.*5280.*12)/(3600.*1000000.)/2*2.54;
+  
+  if (distance < 10.0 && goingForward == true) {
+    Serial.println("distance");
+    controlMovement(0, 0);
+  } 
+  
+  server.handleClient();
 }
