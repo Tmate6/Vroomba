@@ -6,6 +6,9 @@
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
+const char* ssid = "Vroomba";
+const char* password = "123456789";
+
 WebServer server(80);
  
 StaticJsonDocument<250> jsonDocument;
@@ -92,21 +95,13 @@ void setup() {
   pinMode(triggerpin, OUTPUT);
   pinMode(echopin, INPUT);
   
-  Serial.print("Connecting to wifi");
-  WiFi.begin("ARRIS-25DF", "1D56D9B1FD31E39C");
-  
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(500);
-  }
- 
-  Serial.print("Connected. IP: ");
-  Serial.println(WiFi.localIP());
+  Serial.print("Starting access point");
+  WiFi.softAP(ssid, password);
   
   server.on("/", HTTP_POST, handlePost);
   server.begin();
   Serial.print("Server running, accepting requests.");
-}    
+}
        
 void loop() {   
   digitalWrite(triggerpin, LOW);
