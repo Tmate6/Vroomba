@@ -8,7 +8,7 @@
 import Foundation
 
 func sendMotorPositions(right: Int, left: Int) {
-    guard let url = URL(string: "http://192.168.0.101/") else { return }
+    guard let url = URL(string: "http://192.168.4.1/") else { return }
     
     let body = ["right": right, "left": left]
     let finalBody = try! JSONEncoder().encode(body)
