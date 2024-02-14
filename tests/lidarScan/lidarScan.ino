@@ -1,3 +1,9 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_HMC5883_U.h>
+
+Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
+
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
@@ -22,23 +28,61 @@ int i;
 int uart[9];
 const int HEADER=0x59;
 
-unsigned int scan[500];
+const int cyclesInFullTurn = 500;
+
+unsigned int scan[cyclesInFullTurn];
+
+int startX;
+int startY;
+int startZ;
+
+void setFullRotation() {
+  sensors_event_t event;
+  mag.getEvent(&event);
+  
+  startX = event.magnetic.x;
+  startY = event.magnetic.y;
+  startZ = event.magnetic.z;
+}
+
+bool checkFullRotation() {
+  sensors_event_t event;
+  mag.getEvent(&event);
+/*
+  Serial.print(startX); Serial.print(" "); Serial.println(event.magnetic.x);
+  Serial.print(startY); Serial.print(" "); Serial.println(event.magnetic.y);
+  */
+  if (event.magnetic.x > (startX - 4) && event.magnetic.x < (startX + 4)) {
+    if (event.magnetic.y > (startY - 4) && event.magnetic.y < (startY + 4)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 void scanLidar() {
-  analogWrite(rightDisable, 170);
-  analogWrite(leftDisable, 170);
-  digitalWrite(leftForward, HIGH);
-  digitalWrite(rightBack, HIGH);
+  setFullRotation();
   
-  for (int turn = 0; turn < 500; turn++) {
-    scan[turn] = readLidar();
-    Serial.println(scan[turn]);
+  analogWrite(rightDisable, 180);
+  analogWrite(leftDisable, 180);
+  digitalWrite(leftBack, HIGH);
+  digitalWrite(rightForward, HIGH);
+
+  int turns = 0;
+
+  while (true) {
+    if (checkFullRotation() == true && turns > 100) {
+      break;
+    }
+    
+    Serial.println(readLidar());
+    turns++;
   }
 
   digitalWrite(rightDisable, HIGH);
   digitalWrite(leftDisable, HIGH);
-  digitalWrite(leftForward, LOW);
-  digitalWrite(rightBack, LOW);
+  digitalWrite(leftBack, LOW);
+  digitalWrite(rightForward, LOW);
 }
 
 int readLidar() {
@@ -63,27 +107,30 @@ int readLidar() {
             dist = uart[2] + uart[3]*256;
             strength = uart[4] + uart[5]*256;
             temp = (uart[6] + uart[7]*256)/8 - 256;
-            
-            /*Serial.print("Distance: ");
-            Serial.print(dist);
-            Serial.print("cm, Strength: ");
-            Serial.print(strength);
-            Serial.print(", Chip Temp: ");
-            Serial.print(temp);
-            Serial.println("°C");*/
 
             return dist;
           }
         }
       }
     }
-    delay(10);
+    delay(5);
   }
 }
 
 void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
+  Serial.begin(115200);
+  
+  // Magnetometer
+  if (!mag.begin()) {
+    Serial.println("Magnetometer error");
+    while(1);
+  }
+  
+  Serial.println("Magnetometer working");
+
+  // Motor
   pinMode(rightDisable, OUTPUT); digitalWrite(rightDisable, HIGH);
   pinMode(leftDisable, OUTPUT); digitalWrite(leftDisable, HIGH);
 
@@ -91,13 +138,14 @@ void setup() {
   pinMode(rightBack, OUTPUT); digitalWrite(rightBack, LOW);
   pinMode(leftForward, OUTPUT); digitalWrite(leftForward, LOW);
   pinMode(leftBack, OUTPUT); digitalWrite(leftBack, LOW);
-  
-  Serial.begin(115200);
+
+  // Lidar
   LidarSerial.begin(115200);
-  
 }
 
 void loop() {
-  delay(600);
+  Serial.println("[SCAN START]");
+  delay(1200);
   scanLidar();
+  Serial.println("[SCAN END]");
 }
