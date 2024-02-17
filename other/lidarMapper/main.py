@@ -15,9 +15,11 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 with open("data.yml", 'r') as file:
-    stringData = file.read().splitlines()
+    stringData = file.read().split(",")
     data = []
     for dataPoint in stringData:
+        if dataPoint == "0":
+            continue
         try:
             data.append(int(dataPoint))
         except:
@@ -67,8 +69,6 @@ def correctSensorOffset(data):
         
     return newData
 
-
-
 class Cell:
     def __init__(self) -> None:
         self.isWall = False
@@ -81,7 +81,7 @@ def mapPoints(data):
     x = data * np.cos(angles)
     y = data * np.sin(angles)
 
-    cellSize = 5
+    cellSize = 15
 
     minX, maxX = min(x), max(x)
     minY, maxY = min(y), max(y)
