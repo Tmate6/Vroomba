@@ -2,6 +2,7 @@ import re
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.patches as patches
+from collections import deque
 
 class bcolors:
     HEADER = '\033[95m'
@@ -27,52 +28,51 @@ with open("data.yml", 'r') as file:
 
 print(data)
 
-'''def detectFullRotation(data, windowLen):
-    threshold = 0
-    while True:
-        print(f'[----------------------------------]')
-        print(f'[ Index | Data | Comp | +- | Match ]')
-        print(f'[-------+------+------+----+-------]')
-        
-        startWindow = data[0:windowLen]
-        processingData = data[windowLen:]
-        print(startWindow)
-
-        checkWindow = []
-        matched = 0
-
-        for i, distance in enumerate(processingData):
-            print(f'[ {i+windowLen}{(5-len(str(i+windowLen))) * " "} | {distance}{(4-len(str(distance))) * " "} | {startWindow[matched]}{(4-len(str(startWindow[matched]))) * " "} | {bcolors.OKGREEN if threshold <= 5 else bcolors.WARNING if threshold <= 10 else bcolors.FAIL}{threshold}{(2-len(str(threshold))) * " "} |', end='')
-
-            if distance <= (startWindow[matched] + threshold) and distance >= (startWindow[matched] - threshold):
-                matched += 1
-                checkWindow.append(distance)
-
-                print(f' {bcolors.OKGREEN}{matched}{(5-len(str(matched))) * " "}{bcolors.ENDC} ]')
-            else:
-                matched = 0
-                checkWindow = []
-
-                print(f' {bcolors.FAIL}{matched}{(5-len(str(matched))) * " "}{bcolors.ENDC} ]')
-
-            if matched == windowLen:
-                print(f'[-----------------------------]')
-                print(f'[     Match at index {i}{(6-len(str(i))) * " "}   ]')
-                print(f'[-----------------------------]')
-                return data[:i]
-        threshold += 1
-'''
 def correctSensorOffset(data):
     newData = []
     for distance in data:
-        newData.append(distance + 12)
+        newData.append(distance + 17)
         
     return newData
 
 class Cell:
     def __init__(self) -> None:
+        self.innerPixels = 0
+        self.isAvaliable = False
         self.isWall = False
         self.isCenter = False
+
+def bresenham(x0, y0, x1, y1):
+    points = []
+    dx = abs(x1 - x0)
+    dy = abs(y1 - y0)
+    x, y = x0, y0
+    sx = -1 if x0 > x1 else 1
+    sy = -1 if y0 > y1 else 1
+    if dx > dy:
+        err = dx / 2.0
+        while x != x1:
+            points.append((x, y))
+            err -= dy
+            if err < 0:
+                y += sy
+                err += dx
+            x += sx
+    else:
+        err = dy / 2.0
+        while y != y1:
+            points.append((x, y))
+            err -= dx
+            if err < 0:
+                x += sx
+                err += dy
+            y += sy      
+    points.append((x, y))
+    return points
+
+def hasLineOfSight(grid, start, end):
+    points = list(bresenham(start[0], start[1], end[0], end[1]))
+    return all(not grid[x][y].isWall for x, y in points)
 
 def mapPoints(data):
     data = correctSensorOffset(data)
@@ -81,7 +81,7 @@ def mapPoints(data):
     x = data * np.cos(angles)
     y = data * np.sin(angles)
 
-    cellSize = 15
+    cellSize = 32
 
     minX, maxX = min(x), max(x)
     minY, maxY = min(y), max(y)
@@ -96,9 +96,12 @@ def mapPoints(data):
         gridY = int((yCoord - minY) / cellSize)
         grid[gridX][gridY].isWall = True
 
-    gridX = int((0 - minX) / cellSize)
-    gridY = int((0 - minY) / cellSize)
-    grid[gridX][gridY].isCenter = True
+    # Line-of-sight from start point
+    startX, startY = int((0 - minX) / cellSize), int((0 - minY) / cellSize)
+    for x in range(xSize):
+        for y in range(ySize):
+            if not grid[x][y].isWall and hasLineOfSight(grid, (startX, startY), (x, y)):
+                grid[x][y].isAvaliable = True
 
     plotGrid(grid, cellSize, minX, maxX, minY, maxY)
 
@@ -106,7 +109,15 @@ def plotGrid(grid, cellSize, minX, maxX, minY, maxY):
     fig, ax = plt.subplots(figsize=(10, 10))
     for i in range(len(grid)):
         for j in range(len(grid[0])):
-            color = 'blue' if grid[i][j].isWall else 'red' if grid[i][j].isCenter else 'white'
+            if grid[i][j].isWall:
+                color = 'blue'
+            elif grid[i][j].isAvaliable:
+                color = 'green'
+            else:
+                color = 'white'
+
+            if grid[i][j].isCenter:
+                color = 'red'
             rect = patches.Rectangle((i*cellSize, j*cellSize), cellSize, cellSize, linewidth=1, edgecolor='black', facecolor=color)
             ax.add_patch(rect)
 
