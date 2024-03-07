@@ -5,7 +5,6 @@
 
 const byte SdPin = 5;
 
-
 // Magnetometer
 #include <Wire.h>
 #include <Adafruit_Sensor.h>

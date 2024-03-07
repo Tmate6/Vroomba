@@ -23,8 +23,10 @@ byte leftBack = 33;
 
 bool goingForward;
 
+byte voltagePin = 35;
+
 void controlMovement(int right, int left) {
-  //Serial.print("Request details - right: "); Serial.print(right); Serial.print(", left: "); Serial.println(left);
+  Serial.print("Request details - right: "); Serial.print(right); Serial.print(", left: "); Serial.println(left);
 
   if (right > 0) {
     digitalWrite(rightForward, HIGH);
@@ -52,16 +54,25 @@ void controlMovement(int right, int left) {
   }
 }
 
-void handlePost() {
-  //Serial.println("Request recieved");
+void handleMovePost() {
+  Serial.println("Move request recieved");
   
   String body = server.arg("plain");
-  //Serial.println(body);
+  Serial.println(body);
   deserializeJson(jsonDocument, body);
   
   controlMovement(int(jsonDocument["right"]) * 2.55, int(jsonDocument["left"]) * 2.55);
   
   server.send(200, "application/json", "{}");
+}
+
+void handleStatusPost() {
+  Serial.println("Status request recieved");
+  double voltage = analogRead(voltagePin) * (3.3 / 4095.0) * 11.25;
+  Serial.println(voltage);
+  
+  String statusResponse = String("{\"voltage\":" + String(voltage, 2) + '}');
+  server.send(200, "application/json", statusResponse);
 }
 
 void setup() {
@@ -70,22 +81,24 @@ void setup() {
   pinMode(rightDisable, OUTPUT); digitalWrite(rightDisable, LOW);
   pinMode(leftDisable, OUTPUT); digitalWrite(leftDisable, LOW);
   
-  //Serial.begin(115200);
+  Serial.begin(115200);
 
-  //Serial.println("Motor setup");
-  
+  Serial.println("Motor setup");
   pinMode(rightForward, OUTPUT);
   pinMode(rightBack, OUTPUT);
   pinMode(leftForward, OUTPUT);
   pinMode(leftBack, OUTPUT);
 
-  //Serial.println("Starting access point");
+  pinMode(voltagePin, INPUT);
+
+  Serial.println("Starting access point");
   WiFi.softAP(ssid, password);
   
-  server.on("/", HTTP_POST, handlePost);
+  server.on("/", HTTP_POST, handleMovePost);
+  server.on("/status", HTTP_POST, handleStatusPost);
   server.begin();
   
-  //Serial.print("Server running, accepting requests.");
+  Serial.print("Server running, accepting requests.");
 }
 
 void loop() {

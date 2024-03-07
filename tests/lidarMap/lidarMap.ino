@@ -1,7 +1,7 @@
 #include <math.h>
 
 struct Cell {
-    bool isWall = false;
+  bool isWall = false;
 };
 
 void setup() {
